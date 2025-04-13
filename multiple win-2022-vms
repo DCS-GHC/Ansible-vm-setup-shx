@@ -1,0 +1,90 @@
+---
+- name: Deploy new VMs from a template on VMware ESXi 7
+  hosts: localhost
+  gather_facts: no
+  collections:
+    - community.vmware
+
+  vars_files:
+    - secrets.yml
+
+  vars:
+    validate_certs: no
+
+    # VM Specifications
+    vm_specs:
+      - vm_name: "test-win-6"
+        ip_address: "10.132.33.29"
+      - vm_name: "test-win-7"
+        ip_address: "10.132.33.30"
+      - vm_name: "test-win-8"
+        ip_address: "10.132.33.31"
+      - vm_name: "test-win-9"
+        ip_address: "10.132.33.32"
+
+    datacenter_name: "shx"
+    cluster_name: "shx01"
+    vm_folder: "Application"
+    template_name: "Win2022STD Template"
+    datastore: "repl"
+    network_name: "AdminLan-427"
+
+    # Hardware Configuration
+    num_cpus: 4
+    memory_gb: 8  # Memory in GB
+    disk_size_gb: 90
+
+    # Network Configuration
+    netmask: "255.255.248.0"
+    gateway: "10.132.39.254"
+    dns_servers:
+      - "8.8.8.8"
+      - "10.140.3.229"
+      - "10.140.3.224"
+
+    # Domain Join Configuration
+    domain: "corp.ghc-hmo.com"
+    domain_admin: "{{ vcenter_username }}"
+    domain_password: "{{ vcenter_password }}"
+
+  tasks:
+    - name: Deploy VMs from template
+      community.vmware.vmware_guest:
+        hostname: "{{ svcenter_hostname }}"
+        username: "{{ vcenter_username }}"
+        password: "{{ vcenter_password }}"
+        validate_certs: "{{ validate_certs }}"
+        name: "{{ item.vm_name }}"
+        template: "{{ template_name }}"
+        datacenter: "{{ datacenter_name }}"
+        cluster: "{{ cluster_name }}"
+        folder: "{{ vm_folder }}"
+        datastore: "{{ datastore }}"
+        state: poweredon
+        hardware:
+          num_cpus: "{{ num_cpus }}"
+          memory_mb: "{{ memory_gb | int * 1024 }}"  # Convert GB to MB
+          scsi: paravirtual
+        disk:
+          - size_gb: "{{ disk_size_gb }}"
+            type: thin
+            datastore: "{{ datastore }}"
+        networks:
+          - name: "{{ network_name }}"
+            ip: "{{ item.ip_address }}"
+            netmask: "{{ netmask }}"
+            gateway: "{{ gateway }}"
+            dns_servers: "{{ dns_servers }}"
+            type: static
+        customization:
+          hostname: "{{ item.vm_name }}"
+          joindomain: "{{ domain }}"
+          domainadmin: "{{ domain_admin }}"
+          domainadminpassword: "{{ domain_password }}"
+        wait_for_ip_address: yes
+      loop: "{{ vm_specs }}"
+      register: vm_info
+
+    - name: Display VM Deployment Results
+      ansible.builtin.debug:
+        var: vm_info
