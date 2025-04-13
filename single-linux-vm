@@ -1,0 +1,81 @@
+---
+- name: Deploy a new VM from a template on VMware ESXi 7
+  hosts: localhost
+  gather_facts: no
+  collections:
+    - community.vmware
+
+  vars_files:
+    - secrets.yml
+
+  vars:
+    validate_certs: no
+
+    # VM Specifications
+    vm_name: "Linux-test-shx-2"
+    datacenter_name: "shx"
+    cluster_name: "shx01"
+    vm_folder: "Application"
+    template_name: "RHEL8 Template"
+    datastore: "nonrepl"
+    network_name: "AdminLan-427"
+
+    # Hardware Configuration
+    num_cpus: 4
+    memory_gb: 8
+    disk_size_gb: 90
+
+    # Network Configuration
+    ip_address: "10.132.33.61"
+    netmask: "255.255.248.0"
+    gateway: "10.132.39.254"
+    dns_servers:
+      - "10.132.32.229"
+      - "10.140.3.229"
+      - "10.140.3.224"
+
+    # Domain Join Configuration
+    domain: "corp.ghc-hmo.com"
+    domain_admin: "{{ vcenter_username }}"
+    domain_password: "{{ vcenter_password }}"
+
+  tasks:
+    - name: Deploy VM from template
+      community.vmware.vmware_guest:
+        hostname: "{{ svcenter_hostname }}"
+        username: "{{ vcenter_username }}"
+        password: "{{ vcenter_password }}"
+        validate_certs: "{{ validate_certs }}"
+        name: "{{ vm_name }}"
+        template: "{{ template_name }}"
+        datacenter: "{{ datacenter_name }}"
+        cluster: "{{ cluster_name }}"
+        folder: "{{ vm_folder }}"
+        datastore: "{{ datastore }}"
+        state: poweredon
+        hardware:
+          num_cpus: "{{ num_cpus }}"
+          memory_mb: "{{ memory_gb | int * 1024 }}"  # Convert GB to MB
+          scsi: paravirtual
+        disk:
+          - size_gb: "{{ disk_size_gb }}"
+            type: thin
+            datastore: "{{ datastore }}"
+        networks:
+          - name: "{{ network_name }}"
+            ip: "{{ ip_address }}"
+            netmask: "{{ netmask }}"
+            gateway: "{{ gateway }}"
+            dns_servers: "{{ dns_servers }}"
+            type: static
+        customization:
+          hostname: "{{ vm_name }}"
+          joindomain: "{{ domain }}"
+          domainadmin: "{{ domain_admin }}"
+          domainadminpassword: "{{ domain_password }}"
+        wait_for_ip_address: yes
+      register: vm_info
+
+    - name: Display VM Deployment Results
+      ansible.builtin.debug:
+        var: vm_info
